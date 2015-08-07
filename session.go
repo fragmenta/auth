@@ -73,6 +73,18 @@ func Session(writer http.ResponseWriter, request *http.Request) (SessionStore, e
 	return s, nil
 }
 
+// ClearSession clears the current session cookie
+func ClearSession(writer http.ResponseWriter) {
+	cookie := &http.Cookie{
+		Name:   SessionName,
+		Value:  "",
+		MaxAge: -1,
+		Path:   "/",
+	}
+
+	http.SetCookie(writer, cookie)
+}
+
 // Get a value from the session
 func (s *CookieSessionStore) Get(key string) string {
 	return s.values[key]
