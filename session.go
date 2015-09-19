@@ -1,13 +1,21 @@
-// Package auth provides helpers for encryption and passwords.
 package auth
 
 import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
-	// TODO - remove dependency as we don't use much of it
-	"github.com/fragmenta/auth/internal/cookie"
+)
+
+const (
+	maxLength = 4096
+	maxAge    = 86400 * 30
 )
 
 // These should be set on app startup
@@ -98,18 +106,13 @@ func (s *CookieSessionStore) Set(key string, value string) {
 // Load the session from cookie
 func (s *CookieSessionStore) Load(request *http.Request) error {
 
-	// Just replace this with your own methods on CookieSessionStore...
-	cookieMonster := cookie.New(HMACKey, SecretKey)
-
 	cookie, err := request.Cookie(SessionName)
 	if err != nil {
 		return err
 	}
 
-	//  fmt.Printf("Cookie load: %v\n%v\n",err,cookie)
-
 	// Read the encrypted values back out into our values in the session
-	err = cookieMonster.Decode(SessionName, cookie.Value, &s.values)
+	err = s.Decode(SessionName, HMACKey, SecretKey, cookie.Value, &s.values)
 	if err != nil {
 		return err
 	}
@@ -119,12 +122,8 @@ func (s *CookieSessionStore) Load(request *http.Request) error {
 
 // Save the session to a cookie
 func (s *CookieSessionStore) Save(writer http.ResponseWriter) error {
-	//  println("SAVING SESSION")
 
-	// Just replace this with your own methods on CookieSessionStore...
-	cookieMonster := cookie.New(HMACKey, SecretKey)
-
-	encrypted, err := cookieMonster.Encode(SessionName, s.values)
+	encrypted, err := s.Encode(SessionName, s.values, HMACKey, SecretKey)
 	if err != nil {
 		return err
 	}
@@ -136,7 +135,6 @@ func (s *CookieSessionStore) Save(writer http.ResponseWriter) error {
 		Secure:   SecureCookies,
 		Path:     "/",
 		Expires:  time.Now().AddDate(0, 0, 7), // Expires in seven days
-
 	}
 
 	http.SetCookie(writer, cookie)
@@ -154,4 +152,144 @@ func (s *CookieSessionStore) Clear(writer http.ResponseWriter) {
 	}
 
 	http.SetCookie(writer, cookie)
+}
+
+// This code based on Gorilla secure cookie
+
+// Encode a given value in the session cookie
+func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []byte, blockKey []byte) (string, error) {
+
+	if hashKey == nil || blockKey == nil {
+		return "", errors.New("Keys not set")
+	}
+
+	// Serialize
+	b, err := serialize(value)
+	if err != nil {
+		return "", err
+	}
+
+	// Encrypt with AES
+	b, err = Encrypt(blockKey, b)
+	if err != nil {
+		return "", err
+	}
+
+	// Encode to base64
+	b = encodeBase64(b)
+
+	// Create MAC for "name|date|value". Extra pipe unused.
+	now := time.Now().UTC().Unix()
+	b = []byte(fmt.Sprintf("%s|%d|%s|", name, now, b))
+	mac := CreateMAC(hmac.New(sha256.New, hashKey), b[:len(b)-1])
+
+	// Append mac, remove name
+	b = append(b, mac...)[len(name)+1:]
+
+	// Encode to base64 again
+	b = encodeBase64(b)
+
+	// Check length when encoded
+	if maxLength != 0 && len(b) > maxLength {
+		return "", errors.New("Cookie: the value is too long")
+	}
+
+	// Done, convert to string and return
+	return string(b), nil
+}
+
+// Decode the value in the session cookie
+func (s *CookieSessionStore) Decode(name string, hashKey []byte, blockKey []byte, value string, dst interface{}) error {
+
+	if hashKey == nil || blockKey == nil {
+		return errors.New("Keys not set")
+	}
+
+	if maxLength != 0 && len(value) > maxLength {
+		return errors.New("cookie value is too long")
+	}
+
+	// Decode from base64
+	b, err := decodeBase64([]byte(value))
+	if err != nil {
+		return err
+	}
+	// Verify MAC - value is "date|value|mac"
+	parts := bytes.SplitN(b, []byte("|"), 3)
+	if len(parts) != 3 {
+		return errors.New("MAC invalid")
+	}
+	h := hmac.New(sha256.New, hashKey)
+	b = append([]byte(name+"|"), b[:len(b)-len(parts[2])-1]...)
+	err = VerifyMAC(h, b, parts[2])
+	if err != nil {
+		return err
+	}
+
+	// Verify date ranges
+	timestamp, err := strconv.ParseInt(string(parts[0]), 10, 64)
+	if err != nil {
+		return errors.New("timestamp invalid")
+	}
+	now := time.Now().UTC().Unix()
+	if maxAge != 0 && timestamp < now-maxAge {
+		return errors.New("timestamp expired")
+	}
+
+	// Decode from base64
+	b, err = decodeBase64(parts[1])
+	if err != nil {
+		return err
+	}
+
+	// Derypt with AES
+	b, err = Decrypt(blockKey, b)
+	if err != nil {
+		return err
+	}
+
+	// Deserialize
+	err = deserialize(b, dst)
+	if err != nil {
+		return err
+	}
+
+	// Done.
+	return nil
+}
+
+// encodeBase64 encodes a value using base64.
+func encodeBase64(value []byte) []byte {
+	encoded := make([]byte, base64.URLEncoding.EncodedLen(len(value)))
+	base64.URLEncoding.Encode(encoded, value)
+	return encoded
+}
+
+// decodeBase64 decodes a value using base64.
+func decodeBase64(value []byte) ([]byte, error) {
+	decoded := make([]byte, base64.URLEncoding.DecodedLen(len(value)))
+	b, err := base64.URLEncoding.Decode(decoded, value)
+	if err != nil {
+		return nil, err
+	}
+	return decoded[:b], nil
+}
+
+// serialize encodes a value using gob.
+func serialize(src interface{}) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	enc := gob.NewEncoder(buf)
+	if err := enc.Encode(src); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// deserialize decodes a value using gob.
+func deserialize(src []byte, dst interface{}) error {
+	dec := gob.NewDecoder(bytes.NewBuffer(src))
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	return nil
 }

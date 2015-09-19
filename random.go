@@ -1,4 +1,3 @@
-// Package auth provides helpers for encryption and passwords.
 package auth
 
 import (
@@ -10,7 +9,7 @@ import (
 // RandomToken generates a random token 32 bytes long, or at a specified length if arguments are provided
 func RandomToken(args ...int) []byte {
 	length := 32
-	if len(args) > 0 {
+	if len(args) > 0 && args[0] != 0 {
 		length = args[0]
 	}
 	b := make([]byte, length)
