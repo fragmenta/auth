@@ -99,7 +99,7 @@ func VerifyMAC(h hash.Hash, value []byte, mac []byte) error {
 	if subtle.ConstantTimeCompare(mac, m) == 1 {
 		return nil
 	}
-	return fmt.Errorf("Invalid MAC:%v", m)
+	return fmt.Errorf("Invalid MAC:%s", string(m))
 }
 
 // Encryption - based on gorrilla secure cookie
