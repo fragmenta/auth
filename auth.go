@@ -22,8 +22,15 @@ func CheckPassword(pass, hash string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pass))
 }
 
-// EncryptPassword hashes a password with a random salt using bcrypt.
+// HashPassword hashes a password with a random salt using bcrypt.
+func HashPassword(pass string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(pass), HashCost)
+	return string(hash), err
+}
+
+// EncryptPassword hashes a password with a random salt using bcrypt - renamed to HashPassword to be clearer
 func EncryptPassword(pass string) (string, error) {
+	fmt.Printf("Please use HashPassword instead, auth.EncryptPassword is deprecated")
 	hash, err := bcrypt.GenerateFromPassword([]byte(pass), HashCost)
 	return string(hash), err
 }
