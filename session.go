@@ -18,7 +18,7 @@ const (
 	maxAge    = 86400 * 30
 )
 
-// These should be set on app startup
+// These should be set once on app startup
 
 // The key for generating HMAC
 var HMACKey []byte
@@ -34,6 +34,9 @@ var SecureCookies bool
 
 // The session user key
 var SessionUserKey string
+
+// The session token key
+var SessionTokenKey string
 
 // SessionStore is the interface for a session store (backed by unknown storage)
 type SessionStore interface {
@@ -55,10 +58,25 @@ func init() {
 	SecureCookies = false // off by default
 	SessionName = "fragmenta_session"
 	SessionUserKey = "user_id"
+	SessionTokenKey = "authenticity_token"
 }
 
 // Session loads or create the current session
 func Session(writer http.ResponseWriter, request *http.Request) (SessionStore, error) {
+
+	s, err := SessionGet(request)
+	if err != nil {
+		// If no session, write it out for the first time (empty)
+		fmt.Printf("Error on cookie load: %s\n", err)
+		s.Save(writer)
+		return s, nil
+	}
+
+	return s, nil
+}
+
+// SessionGet loads the current session (if any)
+func SessionGet(request *http.Request) (SessionStore, error) {
 
 	if len(HMACKey) == 0 || len(SecretKey) == 0 {
 		return nil, errors.New("Authentication secrets not initialised")
@@ -69,13 +87,10 @@ func Session(writer http.ResponseWriter, request *http.Request) (SessionStore, e
 		values: make(map[string]string, 0),
 	}
 
-	// Check if the session exists
+	// Check if the session exists and load it
 	err := s.Load(request)
 	if err != nil {
-		// If no session, write it out for the first time (empty)
-		fmt.Printf("Error on cookie load: %s\n", err)
-		s.Save(writer)
-		return s, nil
+		return s, err // return blank session if none found
 	}
 
 	return s, nil

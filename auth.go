@@ -2,20 +2,20 @@
 package auth
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/subtle"
-	"encoding/base64"
-	"encoding/hex"
-	"errors"
 	"fmt"
-	"hash"
+	"net/http"
+
 	// A vendored version of the golang bcrypt pkg - we vendor mainly to avoid dependency on hg
 	"github.com/fragmenta/auth/internal/bcrypt"
 )
 
-// For bcrypt hashes - this should remain constant or hashed passwords will need to be recalculated
-var HashCost = 10
+// TODO: Check rotating cyphers (scrypt instead of bcrypt), check whether we still need to vendor bcrypt to avoid hg
+
+// HashCost is used bcrypt hashes - if this changes hashed passwords would need to be recalculated
+const HashCost = 10
+
+// TokenLength is the lenth of random tokens used for authenticity tokens
+const TokenLength = 32
 
 // CheckPassword compares a password hashed with bcrypt
 func CheckPassword(pass, hash string) error {
@@ -28,139 +28,77 @@ func HashPassword(pass string) (string, error) {
 	return string(hash), err
 }
 
-// EncryptPassword hashes a password with a random salt using bcrypt - renamed to HashPassword to be clearer
-func EncryptPassword(pass string) (string, error) {
-	fmt.Printf("Please use HashPassword instead, auth.EncryptPassword is deprecated")
-	hash, err := bcrypt.GenerateFromPassword([]byte(pass), HashCost)
-	return string(hash), err
+// AuthenticityToken returns a new token for a request,
+// and if necessary sets the cookie with our secret
+func AuthenticityToken(writer http.ResponseWriter, request *http.Request) (string, error) {
+	// Fetch the session store
+	session, err := Session(writer, request)
+	if err != nil {
+		return "", err
+	}
+	// Get the secret from the session, or generate and save one if none found
+	secret := session.Get(SessionTokenKey)
+	if secret == "" {
+		secret = BytesToBase64(RandomToken(TokenLength))
+		session.Set(SessionTokenKey, secret)
+		session.Save(writer)
+	}
+
+	// Now from secret, generate a secure token for this request
+	token := AuthenticityTokenWithSecret(Base64ToBytes(secret))
+	return BytesToBase64(token), nil
 }
 
-// TODO For CSRF below, we should include a time token at the end of the string
-// and validate it is correct down to a given window (say 1 hour) - after that the token expires
-
-// TODO http://www.thoughtcrime.org/blog/the-cryptographic-doom-principle/
-// Encrypt Then Authenticate
-// The sender encrypts the plaintext, then appends a MAC of the ciphertext. Ek1(P) || MACk2(Ek1(P))
-
-// TODO actually encrypt, don't just hash the CSRF
-
-// CheckCSRFToken compares a plain text with a string encrypted by bcrypt as a csrf token
-func CheckCSRFToken(token, b64 string) error {
-	// First base64 decode the value
-	encrypted := make([]byte, 256)
-	_, err := base64.URLEncoding.Decode(encrypted, []byte(b64))
+// CheckAuthenticityToken checks the token against that stored in a session cookie
+// If the check fails, returns an error
+func CheckAuthenticityToken(token string, request *http.Request) error {
+	// Fetch the session store
+	session, err := SessionGet(request)
 	if err != nil {
 		return err
 	}
 
-	return bcrypt.CompareHashAndPassword(encrypted, []byte(token))
-}
-
-// CSRFToken encrypts a string with a random salt using bcrypt.
-func CSRFToken(token string) (string, error) {
-	b, err := bcrypt.GenerateFromPassword([]byte(token), HashCost)
-	if err != nil {
-		return "", err
+	// Get the secret from the session
+	secret := session.Get(SessionTokenKey)
+	if secret == "" {
+		return fmt.Errorf("auth: #error fetching authenticity secret from session")
 	}
 
-	return base64.URLEncoding.EncodeToString(b), nil
+	return CheckAuthenticityTokenWithSecret(Base64ToBytes(token), Base64ToBytes(secret))
 }
 
-// HexToBytes converts a hex string representation of bytes to a byte representation
-func HexToBytes(h string) []byte {
-	s, err := hex.DecodeString(h)
-	if err != nil {
-		s = []byte("")
+// CheckAuthenticityTokenWithSecret checks an auth token against a secret directly
+func CheckAuthenticityTokenWithSecret(token, secret []byte) error {
+	if len(token) != TokenLength*2 {
+		return fmt.Errorf("auth: #error failed - invalid token length")
 	}
-	return s
-}
-
-// BytesToHex converts bytes to a hex string representation of bytes
-func BytesToHex(b []byte) string {
-	return hex.EncodeToString(b)
-}
-
-// Base64ToBytes converts from a b64 string to bytes
-func Base64ToBytes(h string) []byte {
-	s, err := base64.URLEncoding.DecodeString(h)
-	if err != nil {
-		s = []byte("")
-	}
-	return s
-}
-
-// BytesToBase64 converts bytes to a base64 string representation
-func BytesToBase64(b []byte) string {
-	return base64.URLEncoding.EncodeToString(b)
-}
-
-// CreateMAC creates a MAC.
-func CreateMAC(h hash.Hash, value []byte) []byte {
-	h.Write(value)
-	return h.Sum(nil)
-}
-
-// VerifyMAC verifies the MAC is valid with ConstantTimeCompare.
-func VerifyMAC(h hash.Hash, value []byte, mac []byte) error {
-	m := CreateMAC(h, value)
-	if subtle.ConstantTimeCompare(mac, m) == 1 {
+	// Grab random byte prefix, xor suffix secret against it to get our secret out,
+	// and compare result to secret stored in cookie
+	s := safeXORBytes(token[TokenLength:], token[:TokenLength])
+	if CheckRandomToken(s, secret) {
 		return nil
 	}
-	return fmt.Errorf("Invalid MAC:%s", string(m))
+
+	return fmt.Errorf("auth: #error failed with token")
 }
 
-// Encryption - based on gorrilla secure cookie
-
-// Encrypt encrypts a value using the given key with AES.
-func Encrypt(blockKey []byte, value []byte) ([]byte, error) {
-
-	// Create cypher
-	block, err := aes.NewCipher(blockKey)
-	if err != nil {
-		return nil, err
-	}
-
-	// A random initialization vector (http://goo.gl/zF67k) with the length of the
-	// block size is prepended to the resulting ciphertext.
-	iv := RandomToken(block.BlockSize())
-	if iv == nil {
-		return nil, errors.New("failed to generate random iv")
-	}
-
-	// Encrypt it.
-	stream := cipher.NewCTR(block, iv)
-	stream.XORKeyStream(value, value)
-
-	// Return iv + ciphertext.
-	return append(iv, value...), nil
+// AuthenticityTokenWithSecret generates a new authenticity token from the secret
+// by xoring a new random token with it and prepending the random bytes
+// See https://github.com/rails/rails/pull/16570 or gorilla/csrf for justification
+func AuthenticityTokenWithSecret(secret []byte) []byte {
+	random := RandomToken(TokenLength)
+	return append(random, safeXORBytes(random, secret)...)
 }
 
-// Decrypt decrypts a value using the given key with AES.
-//
-// The value to be decrypted must be prepended by a initialization vector
-// (http://goo.gl/zF67k) with the length of the block size.
-func Decrypt(blockKey []byte, value []byte) ([]byte, error) {
-
-	block, err := aes.NewCipher(blockKey)
-	if err != nil {
-		return nil, err
+// Taken from https://golang.org/src/crypto/cipher/xor.go
+func safeXORBytes(a, b []byte) []byte {
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
 	}
-
-	size := block.BlockSize()
-	if len(value) > size {
-		// Extract iv.
-		iv := value[:size]
-
-		// Extract ciphertext.
-		value = value[size:]
-
-		// Decrypt it.
-		stream := cipher.NewCTR(block, iv)
-		stream.XORKeyStream(value, value)
-
-		// Return on success
-		return value, nil
+	dst := make([]byte, n)
+	for i := 0; i < n; i++ {
+		dst[i] = a[i] ^ b[i]
 	}
-
-	return nil, errors.New("the value could not be decrypted")
+	return dst
 }
