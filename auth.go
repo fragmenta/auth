@@ -3,18 +3,16 @@ package auth
 
 import (
 	"fmt"
+	"golang.org/x/crypto/bcrypt"
 	"net/http"
-
-	// A vendored version of the golang bcrypt pkg - we vendor mainly to avoid dependency on hg
-	"github.com/fragmenta/auth/internal/bcrypt"
 )
 
-// TODO: Check rotating cyphers (scrypt instead of bcrypt), check whether we still need to vendor bcrypt to avoid hg
+// TODO: Add rotating cyphers on login (move to scrypt instead of bcrypt)
 
-// HashCost is used bcrypt hashes - if this changes hashed passwords would need to be recalculated
+// HashCost sets the cost of bcrypt hashes - if this changes hashed passwords would need to be recalculated
 const HashCost = 10
 
-// TokenLength is the lenth of random tokens used for authenticity tokens
+// TokenLength sets the length of random tokens used for authenticity tokens
 const TokenLength = 32
 
 // CheckPassword compares a password hashed with bcrypt

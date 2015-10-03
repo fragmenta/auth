@@ -37,7 +37,3 @@ Use auth.Session to set and get values from cookies.
 ```
 
 
-
-### Vendored packages
-
-The bcrypt package is vendored mostly to avoid a requirement for mercurial in order to download dependencies.

@@ -3,8 +3,7 @@ package auth
 import (
 	"encoding/base64"
 	"fmt"
-	// A vendored version of the golang bcrypt pkg - we vendor mainly to avoid dependency on hg
-	"github.com/fragmenta/auth/internal/bcrypt"
+	"golang.org/x/crypto/bcrypt"
 )
 
 /* These DEPRECATED functions should not be used and will be removed in next minor version */
