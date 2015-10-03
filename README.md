@@ -12,10 +12,10 @@ Setup the package on startup
   auth.SecureCookies = true
 ```
 
-Use auth.EncryptPassword to encrypt and auth.CheckPassword to check hashed passwords (with bcrypt)
+Use auth.HashPassword to encrypt and auth.CheckPassword to check hashed passwords (with bcrypt)
 
 ```Go 
-  user.HashedPassword, err = auth.EncryptPassword(params.Get("password")
+  user.HashedPassword, err = auth.HashPassword(params.Get("password")
   if err != nil {
     return err
   }
