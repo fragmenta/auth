@@ -78,13 +78,13 @@ func Session(writer http.ResponseWriter, request *http.Request) (SessionStore, e
 // SessionGet loads the current session (if any)
 func SessionGet(request *http.Request) (SessionStore, error) {
 
-	if len(HMACKey) == 0 || len(SecretKey) == 0 {
-		return nil, errors.New("Authentication secrets not initialised")
-	}
-
 	// Return the current session store from cookie or a new one if none found
 	s := &CookieSessionStore{
 		values: make(map[string]string, 0),
+	}
+
+	if len(HMACKey) == 0 || len(SecretKey) == 0 || len(SessionTokenKey) == 0 {
+		return s, errors.New("Authentication secrets not initialised")
 	}
 
 	// Check if the session exists and load it
