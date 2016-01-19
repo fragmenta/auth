@@ -67,7 +67,7 @@ func Session(writer http.ResponseWriter, request *http.Request) (SessionStore, e
 	s, err := SessionGet(request)
 	if err != nil {
 		// If no session, write it out for the first time (empty)
-		fmt.Printf("Error on cookie load: %s\n", err)
+		//fmt.Printf("Error on cookie load: %s\n", err)
 		s.Save(writer)
 		return s, nil
 	}
