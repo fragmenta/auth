@@ -68,7 +68,7 @@ func CheckAuthenticityToken(token string, request *http.Request) error {
 // CheckAuthenticityTokenWithSecret checks an auth token against a secret directly
 func CheckAuthenticityTokenWithSecret(token, secret []byte) error {
 	if len(token) != TokenLength*2 {
-		return fmt.Errorf("auth: #error failed - invalid token length")
+		return fmt.Errorf("auth: #error failed - invalid token length %d", len(token))
 	}
 	// Grab random byte prefix, xor suffix secret against it to get our secret out,
 	// and compare result to secret stored in cookie
