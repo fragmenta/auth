@@ -13,32 +13,34 @@ import (
 	"time"
 )
 
-const (
-	maxLength = 4096
-	maxAge    = 86400 * 30
-)
+// This sessions code is a stripped down version of Gorilla secure cookie
+// with fewer options and mandatory AES encryption.
 
-// These should be set once on app startup
+// MaxAge is the age in seconds of a cookie before it expires, defaults to 60 days.
+var MaxAge = 86400 * 60
 
-// The key for generating HMAC
+// MaxCookieSize is the maximum length of a cookie in bytes, defaults to 4096.
+var MaxCookieSize = 4096
+
+// HMACKey is the key for generating HMAC.
 var HMACKey []byte
 
-// The key for encrypting content
+// SecretKey is the key for encrypting content.
 var SecretKey []byte
 
-// The session name
-var SessionName string
+// SessionName is the name of the ssions.
+var SessionName = "fragmenta_session"
 
-// Should we use secure cookies?
-var SecureCookies bool
+// SessionUserKey is the session user key.
+var SessionUserKey = "user_id"
 
-// The session user key
-var SessionUserKey string
+// SessionTokenKey is the session token key.
+var SessionTokenKey = "authenticity_token"
 
-// The session token key
-var SessionTokenKey string
+// SecureCookies is true if we use secure https cookies.
+var SecureCookies = false
 
-// SessionStore is the interface for a session store (backed by unknown storage)
+// SessionStore is the interface for a session store.
 type SessionStore interface {
 	Get(string) string
 	Set(string, string)
@@ -47,18 +49,10 @@ type SessionStore interface {
 	Clear(http.ResponseWriter)
 }
 
-// CookieSessionStore is a Concrete version of SessionStore, which stores the information encrypted with bcrypt in cookies.
+// CookieSessionStore is a concrete version of SessionStore,
+// which stores the information encrypted in cookies.
 type CookieSessionStore struct {
 	values map[string]string
-}
-
-// init the package
-func init() {
-	// HttpOnly is on by default
-	SecureCookies = false // off by default
-	SessionName = "fragmenta_session"
-	SessionUserKey = "user_id"
-	SessionTokenKey = "authenticity_token"
 }
 
 // Session loads or create the current session
@@ -67,7 +61,6 @@ func Session(writer http.ResponseWriter, request *http.Request) (SessionStore, e
 	s, err := SessionGet(request)
 	if err != nil {
 		// If no session, write it out for the first time (empty)
-		//fmt.Printf("Error on cookie load: %s\n", err)
 		s.Save(writer)
 		return s, nil
 	}
@@ -169,7 +162,7 @@ func (s *CookieSessionStore) Clear(writer http.ResponseWriter) {
 	http.SetCookie(writer, cookie)
 }
 
-// This code based on Gorilla secure cookie
+// This code based on Gorilla secure cookie with fewer options
 
 // Encode a given value in the session cookie
 func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []byte, blockKey []byte) (string, error) {
@@ -205,7 +198,7 @@ func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []by
 	b = encodeBase64(b)
 
 	// Check length when encoded
-	if maxLength != 0 && len(b) > maxLength {
+	if MaxCookieSize != 0 && len(b) > MaxCookieSize {
 		return "", errors.New("Cookie: the value is too long")
 	}
 
@@ -220,7 +213,7 @@ func (s *CookieSessionStore) Decode(name string, hashKey []byte, blockKey []byte
 		return errors.New("Keys not set")
 	}
 
-	if maxLength != 0 && len(value) > maxLength {
+	if MaxCookieSize != 0 && len(value) > MaxCookieSize {
 		return errors.New("cookie value is too long")
 	}
 
@@ -247,7 +240,7 @@ func (s *CookieSessionStore) Decode(name string, hashKey []byte, blockKey []byte
 		return errors.New("timestamp invalid")
 	}
 	now := time.Now().UTC().Unix()
-	if maxAge != 0 && timestamp < now-maxAge {
+	if MaxAge != 0 && timestamp < now-int64(MaxAge) {
 		return errors.New("timestamp expired")
 	}
 
