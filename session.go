@@ -222,6 +222,7 @@ func (s *CookieSessionStore) Decode(name string, hashKey []byte, blockKey []byte
 	if err != nil {
 		return err
 	}
+
 	// Verify MAC - value is "date|value|mac"
 	parts := bytes.SplitN(b, []byte("|"), 3)
 	if len(parts) != 3 {

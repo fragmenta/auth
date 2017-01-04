@@ -6,9 +6,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-/* These DEPRECATED functions should not be used and will be removed in next minor version */
+// These DEPRECATED functions should not be used and will be removed in next major version
 
 // CheckCSRFToken DEPRECATED
+// this function will be removed in 2.0
 func CheckCSRFToken(token, b64 string) error {
 	// First base64 decode the value
 	encrypted := make([]byte, 256)
@@ -21,6 +22,7 @@ func CheckCSRFToken(token, b64 string) error {
 }
 
 // CSRFToken DEPRECATED
+// this function will be removed in 2.0
 func CSRFToken(token string) (string, error) {
 	b, err := bcrypt.GenerateFromPassword([]byte(token), HashCost)
 	if err != nil {
@@ -31,6 +33,7 @@ func CSRFToken(token string) (string, error) {
 }
 
 // EncryptPassword DEPRECATED  - renamed to HashPassword to be clearer
+// this function will be removed in 2.0
 func EncryptPassword(pass string) (string, error) {
 	fmt.Printf("Please use HashPassword instead, auth.EncryptPassword is deprecated")
 	return HashPassword(pass)
