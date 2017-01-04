@@ -1,63 +1,71 @@
 package auth
 
+// Provides symmetric authenticated encryption using 256-bit AES-GCM with a random nonce.
+// This copy released under an MIT license (see LICENSE).
+// This code was taken from cryptopasta by George Tankersley
+// https://github.com/gtank/cryptopasta
+//
+// Written in 2015 by George Tankersley <george.tankersley@gmail.com>
+//
+// To the extent possible under law, the author(s) have dedicated all copyright
+// and related and neighboring rights to this software to the public domain
+// worldwide. This software is distributed without any warranty.
+//
+// You should have received a copy of the CC0 Public Domain Dedication along
+// with this software. If not, see // <http://creativecommons.org/publicdomain/zero/1.0/>.
+
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
 	"errors"
+	"io"
 )
 
-// Encryption - based on gorrilla secure cookie
-
-// Encrypt encrypts a value using the given key with AES.
-func Encrypt(blockKey []byte, value []byte) ([]byte, error) {
-
-	// Create cypher
-	block, err := aes.NewCipher(blockKey)
+// Encrypt encrypts data using 256-bit AES-GCM.  This both hides the content of
+// the data and provides a check that it hasn't been altered. Output takes the
+// form nonce|ciphertext|tag where '|' indicates concatenation.
+func Encrypt(plaintext []byte, key []byte) (ciphertext []byte, err error) {
+	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return nil, err
 	}
 
-	// A random initialization vector (http://goo.gl/zF67k) with the length of the
-	// block size is prepended to the resulting ciphertext.
-	iv := RandomToken(block.BlockSize())
-	if iv == nil {
-		return nil, errors.New("failed to generate random iv")
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
 	}
 
-	// Encrypt it.
-	stream := cipher.NewCTR(block, iv)
-	stream.XORKeyStream(value, value)
+	nonce := make([]byte, gcm.NonceSize())
+	_, err = io.ReadFull(rand.Reader, nonce)
+	if err != nil {
+		return nil, err
+	}
 
-	// Return iv + ciphertext.
-	return append(iv, value...), nil
+	return gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
 
-// Decrypt decrypts a value using the given key with AES.
-//
-// The value to be decrypted must be prepended by a initialization vector
-// (http://goo.gl/zF67k) with the length of the block size.
-func Decrypt(blockKey []byte, value []byte) ([]byte, error) {
-
-	block, err := aes.NewCipher(blockKey)
+// Decrypt decrypts data using 256-bit AES-GCM.  This both hides the content of
+// the data and provides a check that it hasn't been altered. Expects input
+// form nonce|ciphertext|tag where '|' indicates concatenation.
+func Decrypt(ciphertext []byte, key []byte) (plaintext []byte, err error) {
+	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return nil, err
 	}
 
-	size := block.BlockSize()
-	if len(value) > size {
-		// Extract iv.
-		iv := value[:size]
-
-		// Extract ciphertext.
-		value = value[size:]
-
-		// Decrypt it.
-		stream := cipher.NewCTR(block, iv)
-		stream.XORKeyStream(value, value)
-
-		// Return on success
-		return value, nil
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, errors.New("the value could not be decrypted")
+	if len(ciphertext) < gcm.NonceSize() {
+		return nil, errors.New("malformed ciphertext")
+	}
+
+	return gcm.Open(nil,
+		ciphertext[:gcm.NonceSize()],
+		ciphertext[gcm.NonceSize():],
+		nil,
+	)
 }

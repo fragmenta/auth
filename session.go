@@ -13,8 +13,7 @@ import (
 	"time"
 )
 
-// This sessions code is a stripped down version of Gorilla secure cookie
-// with fewer options and mandatory AES encryption.
+// This secure cookie code is based on Gorilla secure cookie but with mandatory AES-GCM encryption.
 
 // MaxAge is the age in seconds of a cookie before it expires, defaults to 60 days.
 var MaxAge = 86400 * 60
@@ -22,10 +21,10 @@ var MaxAge = 86400 * 60
 // MaxCookieSize is the maximum length of a cookie in bytes, defaults to 4096.
 var MaxCookieSize = 4096
 
-// HMACKey is the key for generating HMAC.
+// HMACKey is a 32 byte key for generating HMAC which should be distinct from the private key.
 var HMACKey []byte
 
-// SecretKey is the key for encrypting content.
+// SecretKey is a 32 byte key for encrypting content with AES-GCM.
 var SecretKey []byte
 
 // SessionName is the name of the ssions.
@@ -165,9 +164,9 @@ func (s *CookieSessionStore) Clear(writer http.ResponseWriter) {
 // This code based on Gorilla secure cookie with fewer options
 
 // Encode a given value in the session cookie
-func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []byte, blockKey []byte) (string, error) {
+func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []byte, secretKey []byte) (string, error) {
 
-	if hashKey == nil || blockKey == nil {
+	if hashKey == nil || secretKey == nil || len(secretKey) == 0 {
 		return "", errors.New("Keys not set")
 	}
 
@@ -177,8 +176,8 @@ func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []by
 		return "", err
 	}
 
-	// Encrypt with AES
-	b, err = Encrypt(blockKey, b)
+	// Encrypt with AES/GCM
+	b, err = Encrypt(b, secretKey)
 	if err != nil {
 		return "", err
 	}
@@ -186,6 +185,7 @@ func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []by
 	// Encode to base64
 	b = encodeBase64(b)
 
+	// Note Encrypt above also verifies now with GCM.
 	// Create MAC for "name|date|value". Extra pipe unused.
 	now := time.Now().UTC().Unix()
 	b = []byte(fmt.Sprintf("%s|%d|%s|", name, now, b))
@@ -207,9 +207,9 @@ func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []by
 }
 
 // Decode the value in the session cookie
-func (s *CookieSessionStore) Decode(name string, hashKey []byte, blockKey []byte, value string, dst interface{}) error {
+func (s *CookieSessionStore) Decode(name string, hashKey []byte, secretKey []byte, value string, dst interface{}) error {
 
-	if hashKey == nil || blockKey == nil {
+	if hashKey == nil || secretKey == nil {
 		return errors.New("Keys not set")
 	}
 
@@ -252,7 +252,7 @@ func (s *CookieSessionStore) Decode(name string, hashKey []byte, blockKey []byte
 	}
 
 	// Derypt with AES
-	b, err = Decrypt(blockKey, b)
+	b, err = Decrypt(b, secretKey)
 	if err != nil {
 		return err
 	}
