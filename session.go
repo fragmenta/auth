@@ -54,13 +54,11 @@ type CookieSessionStore struct {
 	values map[string]string
 }
 
-// Session loads or create the current session
+// Session loads the current sesions or returns a new blank session.
 func Session(writer http.ResponseWriter, request *http.Request) (SessionStore, error) {
 
 	s, err := SessionGet(request)
 	if err != nil {
-		// If no session, write it out for the first time (empty)
-		s.Save(writer)
 		return s, nil
 	}
 
