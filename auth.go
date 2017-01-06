@@ -9,13 +9,14 @@ import (
 
 // TODO: Add rotating cyphers on login (move to scrypt instead of bcrypt)
 
-// HashCost sets the cost of bcrypt hashes - if this changes hashed passwords would need to be recalculated
+// HashCost sets the cost of bcrypt hashes
+// - if this changes hashed passwords would need to be recalculated.
 const HashCost = 10
 
-// TokenLength sets the length of random tokens used for authenticity tokens
+// TokenLength sets the length of random tokens used for authenticity tokens.
 const TokenLength = 32
 
-// CheckPassword compares a password hashed with bcrypt
+// CheckPassword compares a password hashed with bcrypt.
 func CheckPassword(pass, hash string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pass))
 }
@@ -27,14 +28,14 @@ func HashPassword(pass string) (string, error) {
 }
 
 // AuthenticityToken returns a new token for a request,
-// and if necessary sets the cookie with our secret
+// and if necessary sets the cookie with our secret.
 func AuthenticityToken(writer http.ResponseWriter, request *http.Request) (string, error) {
 	// Fetch the session store
 	session, err := Session(writer, request)
 	if err != nil {
 		return "", err
 	}
-	// Get the secret from the session, or generate and save one if none found
+	// Get the secret from the session, or generate if none found
 	secret := session.Get(SessionTokenKey)
 	if secret == "" {
 		secret = BytesToBase64(RandomToken(TokenLength))
@@ -47,9 +48,10 @@ func AuthenticityToken(writer http.ResponseWriter, request *http.Request) (strin
 	return BytesToBase64(token), nil
 }
 
-// CheckAuthenticityToken checks the token against that stored in a session cookie
-// If the check fails, returns an error
+// CheckAuthenticityToken checks the token against that
+// stored in a session cookie, and returns an error if the check fails.
 func CheckAuthenticityToken(token string, request *http.Request) error {
+
 	// Fetch the session store
 	session, err := SessionGet(request)
 	if err != nil {
@@ -59,17 +61,21 @@ func CheckAuthenticityToken(token string, request *http.Request) error {
 	// Get the secret from the session
 	secret := session.Get(SessionTokenKey)
 	if secret == "" {
-		return fmt.Errorf("auth: #error fetching authenticity secret from session")
+		return fmt.Errorf("auth: error fetching authenticity secret from session")
 	}
 
 	return CheckAuthenticityTokenWithSecret(Base64ToBytes(token), Base64ToBytes(secret))
 }
 
-// CheckAuthenticityTokenWithSecret checks an auth token against a secret directly
+// CheckAuthenticityTokenWithSecret checks
+// an auth token against a secret.
 func CheckAuthenticityTokenWithSecret(token, secret []byte) error {
+
+	// Check token length
 	if len(token) != TokenLength*2 {
-		return fmt.Errorf("auth: #error failed - invalid token length %d", len(token))
+		return fmt.Errorf("auth: error failed - invalid token length %d", len(token))
 	}
+
 	// Grab random byte prefix, xor suffix secret against it to get our secret out,
 	// and compare result to secret stored in cookie
 	s := safeXORBytes(token[TokenLength:], token[:TokenLength])
@@ -77,18 +83,21 @@ func CheckAuthenticityTokenWithSecret(token, secret []byte) error {
 		return nil
 	}
 
-	return fmt.Errorf("auth: #error failed with token")
+	// If we reach here, CheckRandomToken failed
+	return fmt.Errorf("auth: error failed with token")
 }
 
-// AuthenticityTokenWithSecret generates a new authenticity token from the secret
-// by xoring a new random token with it and prepending the random bytes
-// See https://github.com/rails/rails/pull/16570 or gorilla/csrf for justification
+// AuthenticityTokenWithSecret generates a new authenticity token
+// from the secret by xoring a new random token with it
+// and prepending the random bytes
+// See https://github.com/rails/rails/pull/16570
+// or gorilla/csrf for justification.
 func AuthenticityTokenWithSecret(secret []byte) []byte {
 	random := RandomToken(TokenLength)
 	return append(random, safeXORBytes(random, secret)...)
 }
 
-// Taken from https://golang.org/src/crypto/cipher/xor.go
+// safeXORBytes is from https://golang.org/src/crypto/cipher/xor.go.
 func safeXORBytes(a, b []byte) []byte {
 	n := len(a)
 	if len(b) < n {

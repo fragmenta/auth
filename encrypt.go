@@ -1,7 +1,8 @@
 package auth
 
-// Provides symmetric authenticated encryption using 256-bit AES-GCM with a random nonce.
-// This copy released under an MIT license (see LICENSE).
+// Provides symmetric authenticated encryption
+// using 256-bit AES-GCM with a random nonce.
+
 // This code was taken from cryptopasta by George Tankersley
 // https://github.com/gtank/cryptopasta
 //
@@ -13,6 +14,7 @@ package auth
 //
 // You should have received a copy of the CC0 Public Domain Dedication along
 // with this software. If not, see // <http://creativecommons.org/publicdomain/zero/1.0/>.
+// This modified copy released under an MIT license (see LICENSE).
 
 import (
 	"crypto/aes"

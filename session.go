@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,15 +11,16 @@ import (
 	"time"
 )
 
-// This secure cookie code is based on Gorilla secure cookie but with mandatory AES-GCM encryption.
+// This secure cookie code is based on Gorilla secure cookie
+// but with mandatory AES-GCM encryption.
 
-// MaxAge is the age in seconds of a cookie before it expires, defaults to 60 days.
+// MaxAge is the age in seconds of a cookie before it expires, default 60 days.
 var MaxAge = 86400 * 60
 
 // MaxCookieSize is the maximum length of a cookie in bytes, defaults to 4096.
 var MaxCookieSize = 4096
 
-// HMACKey is a 32 byte key for generating HMAC which should be distinct from the private key.
+// HMACKey is a 32 byte key for generating HMAC distinct from SecretKey.
 var HMACKey []byte
 
 // SecretKey is a 32 byte key for encrypting content with AES-GCM.
@@ -98,17 +97,17 @@ func ClearSession(writer http.ResponseWriter) {
 	http.SetCookie(writer, cookie)
 }
 
-// Get a value from the session
+// Get a value from the session.
 func (s *CookieSessionStore) Get(key string) string {
 	return s.values[key]
 }
 
-// Set a value in the session - NB you must call Save after this if you wish to save
+// Set a value in the session, this does not save to the cookie.
 func (s *CookieSessionStore) Set(key string, value string) {
 	s.values[key] = value
 }
 
-// Load the session from cookie
+// Load the session from cookie.
 func (s *CookieSessionStore) Load(request *http.Request) error {
 
 	cookie, err := request.Cookie(SessionName)
@@ -116,7 +115,7 @@ func (s *CookieSessionStore) Load(request *http.Request) error {
 		return err
 	}
 
-	// Read the encrypted values back out into our values in the session
+	// Read the encrypted values back out into our values in the session.
 	err = s.Decode(SessionName, HMACKey, SecretKey, cookie.Value, &s.values)
 	if err != nil {
 		return err
@@ -125,7 +124,7 @@ func (s *CookieSessionStore) Load(request *http.Request) error {
 	return nil
 }
 
-// Save the session to a cookie
+// Save the session to a cookie.
 func (s *CookieSessionStore) Save(writer http.ResponseWriter) error {
 
 	encrypted, err := s.Encode(SessionName, s.values, HMACKey, SecretKey)
@@ -147,7 +146,7 @@ func (s *CookieSessionStore) Save(writer http.ResponseWriter) error {
 	return nil
 }
 
-// Clear the session values from the cookie
+// Clear the session values from the cookie.
 func (s *CookieSessionStore) Clear(writer http.ResponseWriter) {
 	cookie := &http.Cookie{
 		Name:   SessionName,
@@ -159,9 +158,7 @@ func (s *CookieSessionStore) Clear(writer http.ResponseWriter) {
 	http.SetCookie(writer, cookie)
 }
 
-// This code based on Gorilla secure cookie with fewer options
-
-// Encode a given value in the session cookie
+// Encode a given value in the session cookie.
 func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []byte, secretKey []byte) (string, error) {
 
 	if hashKey == nil || secretKey == nil || len(secretKey) == 0 {
@@ -204,7 +201,7 @@ func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []by
 	return string(b), nil
 }
 
-// Decode the value in the session cookie
+// Decode the value in the session cookie.
 func (s *CookieSessionStore) Decode(name string, hashKey []byte, secretKey []byte, value string, dst interface{}) error {
 
 	if hashKey == nil || secretKey == nil {
@@ -262,41 +259,5 @@ func (s *CookieSessionStore) Decode(name string, hashKey []byte, secretKey []byt
 	}
 
 	// Done.
-	return nil
-}
-
-// encodeBase64 encodes a value using base64.
-func encodeBase64(value []byte) []byte {
-	encoded := make([]byte, base64.URLEncoding.EncodedLen(len(value)))
-	base64.URLEncoding.Encode(encoded, value)
-	return encoded
-}
-
-// decodeBase64 decodes a value using base64.
-func decodeBase64(value []byte) ([]byte, error) {
-	decoded := make([]byte, base64.URLEncoding.DecodedLen(len(value)))
-	b, err := base64.URLEncoding.Decode(decoded, value)
-	if err != nil {
-		return nil, err
-	}
-	return decoded[:b], nil
-}
-
-// serialize encodes a value using gob.
-func serialize(src interface{}) ([]byte, error) {
-	buf := new(bytes.Buffer)
-	enc := gob.NewEncoder(buf)
-	if err := enc.Encode(src); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-// deserialize decodes a value using gob.
-func deserialize(src []byte, dst interface{}) error {
-	dec := gob.NewDecoder(bytes.NewBuffer(src))
-	if err := dec.Decode(dst); err != nil {
-		return err
-	}
 	return nil
 }
