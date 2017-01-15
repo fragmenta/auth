@@ -4,6 +4,7 @@ package can
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 )
 
@@ -16,7 +17,7 @@ var mu sync.RWMutex
 // Authorise adds this ability to the list of abilities for this role.
 // Usage: can.Authorise(role.Admin, can.ManageResource, "pages")
 func Authorise(role int64, v Verb, id string) {
-	ability := &Ability{verb: v, role: role, identifier: id, ownership: false}
+	ability := &Ability{role: role, verb: v, identifier: id, ownership: false}
 	add(ability)
 }
 
@@ -24,7 +25,7 @@ func Authorise(role int64, v Verb, id string) {
 // for resources owned by this user.
 // Usage: can.AuthoriseOwner(role.Reader, can.ShowResource, "pages")
 func AuthoriseOwner(role int64, v Verb, id string) {
-	ability := &Ability{verb: v, role: role, identifier: id, ownership: true}
+	ability := &Ability{role: role, verb: v, identifier: id, ownership: true}
 	add(ability)
 }
 
@@ -86,4 +87,9 @@ func (a *Ability) CheckOwner() bool {
 	}
 	// If the ability does not require ownership, return false
 	return a.ownership
+}
+
+// String returns a string description of this ability.
+func (a *Ability) String() string {
+	return fmt.Sprintf("%v %d can %v on %s\n", a.ownership, a.role, a.verb, a.identifier)
 }

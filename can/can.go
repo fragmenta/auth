@@ -50,7 +50,7 @@ func Do(v Verb, r Resource, u User) error {
 	mu.RUnlock()
 
 	// If we reach here, no matching authorisation was found
-	return fmt.Errorf("can: no authorisation for action:%v %v %v", v, r, u)
+	return fmt.Errorf("can: no authorisation for action:%v %v %v role:%d", v, r, u, u.RoleID())
 }
 
 // The following are wrapper functions for can.Do to provide a more elegant interface
