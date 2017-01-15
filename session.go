@@ -86,7 +86,10 @@ func SessionGet(request *http.Request) (SessionStore, error) {
 }
 
 // ClearSession clears the current session cookie
-func ClearSession(writer http.ResponseWriter) {
+func ClearSession(w http.ResponseWriter) {
+	// First delete all Set-Cookie headers so we only have one
+	w.Header().Del("Set-Cookie")
+
 	cookie := &http.Cookie{
 		Name:   SessionName,
 		Value:  "",
@@ -94,7 +97,7 @@ func ClearSession(writer http.ResponseWriter) {
 		Path:   "/",
 	}
 
-	http.SetCookie(writer, cookie)
+	http.SetCookie(w, cookie)
 }
 
 // Get a value from the session.
