@@ -42,6 +42,7 @@ func Do(v Verb, r Resource, u User) error {
 	// Check abilities for a match
 	mu.RLock()
 	for _, a := range abilities {
+
 		// If no err, return nil to signify success
 		if a.Allow(v, r, u) == nil {
 			return nil
@@ -49,8 +50,8 @@ func Do(v Verb, r Resource, u User) error {
 	}
 	mu.RUnlock()
 
-	// If we reach here, no matching authorisation was found
-	return fmt.Errorf("can: no authorisation for action:%v %v %v role:%d", v, r, u, u.RoleID())
+	// If we reach here, no matching authorisation was found - note u may be nil
+	return fmt.Errorf("can: no authorisation for action:%v %v %v", v, r, u)
 }
 
 // The following are wrapper functions for can.Do to provide a more elegant interface
