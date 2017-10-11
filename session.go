@@ -113,6 +113,11 @@ func (s *CookieSessionStore) Set(key string, value string) {
 // Load the session from cookie.
 func (s *CookieSessionStore) Load(request *http.Request) error {
 
+	// Return if session name not defined
+	if SessionName == "" {
+		return fmt.Errorf("auth: error session_name not set")
+	}
+
 	cookie, err := request.Cookie(SessionName)
 	if err != nil {
 		return fmt.Errorf("auth: error getting cookie: %s", err)
@@ -129,6 +134,11 @@ func (s *CookieSessionStore) Load(request *http.Request) error {
 
 // Save the session to a cookie.
 func (s *CookieSessionStore) Save(writer http.ResponseWriter) error {
+
+	// Return error if session name not defined
+	if SessionName == "" {
+		return fmt.Errorf("auth: error session_name not set")
+	}
 
 	encrypted, err := s.Encode(SessionName, s.values, HMACKey, SecretKey)
 	if err != nil {
@@ -164,8 +174,8 @@ func (s *CookieSessionStore) Clear(writer http.ResponseWriter) {
 // Encode a given value in the session cookie.
 func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []byte, secretKey []byte) (string, error) {
 
-	if hashKey == nil || secretKey == nil || len(secretKey) == 0 {
-		return "", errors.New("Keys not set")
+	if name == "" || hashKey == nil || secretKey == nil {
+		return "", errors.New("auth: encode keys not set")
 	}
 
 	// Serialize
@@ -207,7 +217,7 @@ func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []by
 // Decode the value in the session cookie.
 func (s *CookieSessionStore) Decode(name string, hashKey []byte, secretKey []byte, value string, dst interface{}) error {
 
-	if hashKey == nil || secretKey == nil {
+	if name == "" || hashKey == nil || secretKey == nil {
 		return errors.New("auth: decode keys not set")
 	}
 
@@ -218,7 +228,7 @@ func (s *CookieSessionStore) Decode(name string, hashKey []byte, secretKey []byt
 	// Decode from base64
 	b, err := decodeBase64([]byte(value))
 	if err != nil {
-		return err
+		return fmt.Errorf("auth: error decoding base 64 value: %s", err)
 	}
 
 	// Verify MAC - value is "date|value|mac"
