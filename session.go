@@ -73,13 +73,13 @@ func SessionGet(request *http.Request) (SessionStore, error) {
 	}
 
 	if len(HMACKey) == 0 || len(SecretKey) == 0 || len(SessionTokenKey) == 0 {
-		return s, errors.New("Authentication secrets not initialised")
+		return s, errors.New("auth: secrets not initialised")
 	}
 
 	// Check if the session exists and load it
 	err := s.Load(request)
 	if err != nil {
-		return s, err // return blank session if none found
+		return s, fmt.Errorf("auth: error loading session: %s", err) // return blank session if none found
 	}
 
 	return s, nil
@@ -115,13 +115,13 @@ func (s *CookieSessionStore) Load(request *http.Request) error {
 
 	cookie, err := request.Cookie(SessionName)
 	if err != nil {
-		return err
+		return fmt.Errorf("auth: error getting cookie: %s", err)
 	}
 
 	// Read the encrypted values back out into our values in the session.
 	err = s.Decode(SessionName, HMACKey, SecretKey, cookie.Value, &s.values)
 	if err != nil {
-		return err
+		return fmt.Errorf("auth: error decoding session: %s", err)
 	}
 
 	return nil
@@ -132,7 +132,7 @@ func (s *CookieSessionStore) Save(writer http.ResponseWriter) error {
 
 	encrypted, err := s.Encode(SessionName, s.values, HMACKey, SecretKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("auth: error encoding session: %s", err)
 	}
 
 	cookie := &http.Cookie{
@@ -171,13 +171,13 @@ func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []by
 	// Serialize
 	b, err := serialize(value)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("auth: error serializing value: %s", err)
 	}
 
 	// Encrypt with AES/GCM
 	b, err = Encrypt(b, secretKey)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("auth: error encrypting value: %s", err)
 	}
 
 	// Encode to base64
@@ -197,7 +197,7 @@ func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []by
 
 	// Check length when encoded
 	if MaxCookieSize != 0 && len(b) > MaxCookieSize {
-		return "", errors.New("Cookie: the value is too long")
+		return "", fmt.Errorf("auth: error len over max cookie size: %d", MaxCookieSize)
 	}
 
 	// Done, convert to string and return
@@ -208,11 +208,11 @@ func (s *CookieSessionStore) Encode(name string, value interface{}, hashKey []by
 func (s *CookieSessionStore) Decode(name string, hashKey []byte, secretKey []byte, value string, dst interface{}) error {
 
 	if hashKey == nil || secretKey == nil {
-		return errors.New("Keys not set")
+		return errors.New("auth: decode keys not set")
 	}
 
 	if MaxCookieSize != 0 && len(value) > MaxCookieSize {
-		return errors.New("cookie value is too long")
+		return errors.New("auth: cookie value is too long")
 	}
 
 	// Decode from base64
@@ -224,7 +224,7 @@ func (s *CookieSessionStore) Decode(name string, hashKey []byte, secretKey []byt
 	// Verify MAC - value is "date|value|mac"
 	parts := bytes.SplitN(b, []byte("|"), 3)
 	if len(parts) != 3 {
-		return errors.New("MAC invalid")
+		return errors.New("auth: MAC invalid")
 	}
 	h := hmac.New(sha256.New, hashKey)
 	b = append([]byte(name+"|"), b[:len(b)-len(parts[2])-1]...)
@@ -236,29 +236,29 @@ func (s *CookieSessionStore) Decode(name string, hashKey []byte, secretKey []byt
 	// Verify date ranges
 	timestamp, err := strconv.ParseInt(string(parts[0]), 10, 64)
 	if err != nil {
-		return errors.New("timestamp invalid")
+		return errors.New("auth: timestamp invalid")
 	}
 	now := time.Now().UTC().Unix()
 	if MaxAge != 0 && timestamp < now-int64(MaxAge) {
-		return errors.New("timestamp expired")
+		return errors.New("auth: timestamp expired")
 	}
 
 	// Decode from base64
 	b, err = decodeBase64(parts[1])
 	if err != nil {
-		return err
+		return fmt.Errorf("auth: error decoding value: %s", err)
 	}
 
 	// Derypt with AES
 	b, err = Decrypt(b, secretKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("auth: error decrypting value: %s", err)
 	}
 
 	// Deserialize
 	err = deserialize(b, dst)
 	if err != nil {
-		return err
+		return fmt.Errorf("auth: error deserializing value: %s", err)
 	}
 
 	// Done.
