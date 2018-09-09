@@ -56,7 +56,7 @@ if auth.CheckRandomToken(tok1,tok2) {
 }
 ```
 
-## Authorisation
+## Authorization
 
 You can use auth/can (separately) to authorise access to resources. 
 
